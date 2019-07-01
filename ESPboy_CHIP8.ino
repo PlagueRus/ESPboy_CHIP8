@@ -195,7 +195,7 @@ typedef uint16_t displaybase_t;
 
 constexpr auto SCREEN_WIDTH = 64u;
 constexpr auto SCREEN_HEIGHT = 32u;
-constexpr auto LINE_SIZE = (SCREEN_WIDTH / 8 / sizeof(displaybase_t) + 1);
+constexpr auto LINE_SIZE = (SCREEN_WIDTH / 8 / sizeof(displaybase_t));
 constexpr auto BITS_PER_BLOCK = 8 * sizeof(displaybase_t);
 
 constexpr auto v_shift = 16u; // shift from upper edge of the screen
@@ -241,7 +241,7 @@ void updatedisplay()
 	//static unsigned long tme;
 	//tme=millis();
 	for (auto i = 0u; i < SCREEN_HEIGHT; i++)
-		for (auto j = 0u; j < LINE_SIZE - 1; j++)
+		for (auto j = 0u; j < LINE_SIZE; j++)
 		{
 			auto blockindex = i * LINE_SIZE + j;
 			if (display[blockindex] != dbuffer[blockindex])
@@ -257,38 +257,44 @@ uint8_t drawsprite(uint8_t x, uint8_t y, uint8_t size)
 {
 	auto ret = 0;
 	auto isOnlyClear = true;
+	uint32_t vline, xline;
 	displaybase_t data, datal, datah;
 	auto shift = (x % BITS_PER_BLOCK);
 	auto freebits = (BITS_PER_BLOCK - 8);
 	if (!size) size = 16;
 
+	x = x % SCREEN_WIDTH;
+	y = y % SCREEN_HEIGHT;
+
 	for (auto line = 0u; line < size; line++)
 	{
-		if ((x < SCREEN_WIDTH) && ((line + y) < SCREEN_HEIGHT))
-		{
-			data = mem[I + line];
-			data <<= freebits;
+		data = mem[I + line];
+		data <<= freebits;
 
-			datal = data >> shift;
-			if (datal)
+		vline = ((y + line) % SCREEN_HEIGHT) * LINE_SIZE;
+
+		datal = data >> shift;
+		if (datal)
+		{
+			xline = (x / BITS_PER_BLOCK) % LINE_SIZE;
+			displaybase_t* scr1 = &dbuffer[vline + xline];
+			if (*scr1 & datal) ret++;
+			if (isOnlyClear && (*scr1 & datal) != datal) isOnlyClear = false;
+			*scr1 ^= datal;
+		}
+
+		// In normal situations condition is not necessary. But there is a bug, when the shift is more than 
+		// the width of the variable then the variable does not change, appear only with the type uint32_t
+		if (shift > freebits)
+		{
+			datah = data << (BITS_PER_BLOCK - shift);
+			if (datah)
 			{
-				displaybase_t* scr1 = &dbuffer[(y + line) * LINE_SIZE + (x / BITS_PER_BLOCK) + 0];
-				if (*scr1 & datal) ret++;
-				if (isOnlyClear && (*scr1 & datal) != datal) isOnlyClear = false;
-				*scr1 ^= datal;
-			}
-			// In normal situations condition is not necessary. But there is a bug, when the shift is more than 
-			// the width of the variable then the variable does not change, appear only with the type uint32_t
-			if (shift > freebits)
-			{
-				datah = data << (BITS_PER_BLOCK - shift);
-				if (datah)
-				{
-					displaybase_t* scr2 = &dbuffer[(y + line) * LINE_SIZE + (x / BITS_PER_BLOCK) + 1];
-					if (*scr2 & datah) ret++;
-					if (isOnlyClear && (*scr2 & datah) != datah) isOnlyClear = false;
-					*scr2 ^= datah;
-				}
+				xline = (x / BITS_PER_BLOCK + 1) % LINE_SIZE;
+				displaybase_t* scr2 = &dbuffer[vline + xline];
+				if (*scr2 & datah) ret++;
+				if (isOnlyClear && (*scr2 & datah) != datah) isOnlyClear = false;
+				*scr2 ^= datah;
 			}
 		}
 	}
