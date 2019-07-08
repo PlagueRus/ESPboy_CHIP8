@@ -70,7 +70,10 @@ bit8 = 0    drawsprite add "number of out of the screen lines of the sprite" in 
 #define LORESDISPLAY            0
 #define HIRESDISPLAY            1
 
+typedef uint_fast8_t displaybase_t;
+
 constexpr auto VF = 0xF;
+constexpr uint_fast8_t BITS_PER_BLOCK = sizeof(displaybase_t) * 8;
 
 extern const uint8_t PROGMEM fontchip[16 * 5]; // 16 symbols * 5 lines
 
@@ -128,7 +131,7 @@ public:
 		SCREEN_WIDTH = w;
 		SCREEN_HEIGHT = h;
 		LINE_SIZE = (SCREEN_WIDTH / 8 / sizeof(displaybase_t));
-		BITS_PER_BLOCK = 8 * sizeof(displaybase_t);
+//		BITS_PER_BLOCK = 8 * sizeof(displaybase_t);
 
 		delete[] display; display = NULL;
 		delete[] dbuffer; dbuffer = NULL;
@@ -215,12 +218,12 @@ private:
 
 #ifdef BIT_RENDERER
 
-	typedef uint_fast8_t displaybase_t;
+	protected:
 
 	uint_fast16_t SCREEN_WIDTH;
 	uint_fast16_t SCREEN_HEIGHT;
 	uint_fast16_t LINE_SIZE;
-	uint_fast8_t BITS_PER_BLOCK;
+	//uint_fast8_t BITS_PER_BLOCK;
 
 	displaybase_t *display; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 	displaybase_t *dbuffer; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
@@ -230,12 +233,43 @@ private:
 
 	void draw_block(int_fast8_t x, int_fast8_t y, displaybase_t block, displaybase_t diff)
 	{
+		auto stx = x;
+		auto lastclr = block & 1;
+		bool isdrawing = false;
 		for (int k = BITS_PER_BLOCK - 1; k >= 0; k--)
 		{
 			if (diff & 1)
-				draw_pixel(x + k, y, block & 1 );
+			{
+				if (isdrawing)
+				{
+					if ((block & 1) != lastclr)
+					{
+						draw_hline(x + k + 1, y, stx - x - k, lastclr);
+						stx = x + k;
+						lastclr = block & 1;
+					}
+				}
+				else				
+				{
+					stx = x + k;
+					lastclr = block & 1;
+					isdrawing = true;
+				}
+			}
+			else
+			{
+				if (isdrawing)
+				{
+					draw_hline(x + k + 1, y, stx - x - k, lastclr);
+					isdrawing = false;
+				}
+			}
 			diff >>= 1;
 			block >>= 1;
+		}
+		if (isdrawing)
+		{
+			draw_hline(x, y, stx - x + 1, lastclr);
 		}
 	}
 
@@ -548,12 +582,12 @@ private:
 			case CHIP8_MATH_SUB: //sub
 				if (BIT3CTL)
 				{   // carry first
-					reg[VF] = reg[y] < reg[x];
+					reg[VF] = reg[y] <= reg[x];
 					reg[x] = reg[x] - reg[y];
 				}
 				else
 				{
-					cr = reg[y] < reg[x];
+					cr = reg[y] <= reg[x];
 					reg[x] = reg[x] - reg[y];
 					reg[VF] = cr;
 				}
@@ -591,12 +625,12 @@ private:
 			case CHIP8_MATH_RSB: //rsb
 				if (BIT3CTL)
 				{   // carry first
-					reg[VF] = reg[y] > reg[x];
+					reg[VF] = reg[y] >= reg[x];
 					reg[x] = reg[y] - reg[x];
 				}
 				else
 				{
-					cr = reg[y] > reg[x];
+					cr = reg[y] >= reg[x];
 					reg[x] = reg[y] - reg[x];
 					reg[VF] = cr;
 				}

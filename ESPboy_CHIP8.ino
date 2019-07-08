@@ -181,7 +181,6 @@ public:
 	{
 		File f;
 		String data;
-		char *desc;
 		uint16_t c;
 		f = SPIFFS.open(filename, "r");
 		f.read(this->getROM(f.size()), f.size());
@@ -212,8 +211,7 @@ public:
 			timers_emu = data.toInt();
 			data = f.readStringUntil('\n');
 			soundtone_emu = data.toInt();
-			description_emu = f.readStringUntil('\n');
-			description_emu = description_emu.substring(0, 314);
+			description_emu = f.readStringUntil('\n').substring(0, 314);
 			f.close();
 			if (foreground_emu == 255)
 				foreground_emu = random(17) + 1;
@@ -231,8 +229,7 @@ public:
 			opcodesperframe_emu = DEFAULTOPCODEPERFRAME;
 			timers_emu = DEFAULTTIMERSFREQ;
 			soundtone_emu = DEFAULTSOUNDTONE;
-			desc = (char *)"No configuration\nfile found\n\nUsing unoptimal\ndefault parameters";
-			description_emu = desc;
+			description_emu = F("No configuration\nfile found\n\nUsing unoptimal\ndefault parameters");
 		}
 		this->reset();
 	}
@@ -333,7 +330,7 @@ void setup()
 	tft.setTextSize(1);
 	tft.setTextColor(TFT_YELLOW);
 	tft.setCursor(4, 118);
-	tft.print("Chip8/Schip emulator");
+	tft.print(F("Chip8/Schip emulator"));
 
 	Serial.begin(115200); //serial init
 	if (!SPIFFS.begin())
@@ -373,6 +370,8 @@ void setup()
 	tft.fillScreen(TFT_BLACK);
 }
 
+TFT_Chip8 chip8(&tft);
+
 enum EMUSTATE {
 	APP_HELP,
 	APP_SHOW_DIR,
@@ -380,8 +379,6 @@ enum EMUSTATE {
 	APP_EMULATE
 };
 EMUSTATE emustate = APP_HELP;
-
-TFT_Chip8 chip8(&tft);
 
 void loop()
 {
@@ -395,7 +392,7 @@ void loop()
 		filename = String(dir.fileName());
 		filename.toLowerCase();
 
-		if (filename.lastIndexOf(String(".ch8")) > 0)
+		if (filename.lastIndexOf(String(F(".ch8"))) > 0)
 			maxfilesch8++;
 	}
 
@@ -406,7 +403,7 @@ void loop()
 		tft.setTextSize(1);
 		tft.setCursor(0, 0);
 		tft.print(
-			"upload .ch8 to spiffs\n"
+			F("upload .ch8 to spiffs\n"
 			"\n"
 			"add config file for\n"
 			" - keys remap\n"
@@ -420,7 +417,7 @@ void loop()
 			"during the play press\n"
 			"both side buttons for\n"
 			" - RESET - shortpress\n"
-			" - EXIT  - longpress");
+			" - EXIT  - longpress"));
 		waitkeyunpressed();
 		chip8.waitanykey();
 		waitkeyunpressed();
@@ -431,7 +428,7 @@ void loop()
         tft.fillScreen(TFT_BLACK);
         tft.setCursor(0, 60);
         tft.setTextColor(TFT_MAGENTA);
-        tft.print(" Chip8 ROMs not found");
+        tft.print(F(" Chip8 ROMs not found"));
         while (1) 
             delay(5000);
     }
@@ -445,13 +442,13 @@ void loop()
 			filename = String(dir.fileName());
 			filename.toLowerCase();
 
-			if (filename.lastIndexOf(String(".ch8")) > 0)
+			if (filename.lastIndexOf(String(F(".ch8"))) > 0)
 				countfilesch8++;
 		}
 		tft.fillScreen(TFT_BLACK);
 		tft.setCursor(0, 0);
 		tft.setTextColor(TFT_YELLOW);
-		tft.print("SELECT GAME:");
+		tft.print(F("SELECT GAME:"));
 		tft.setTextColor(TFT_MAGENTA);
 		countfilesonpage = 0;
 		while (dir.next() && (countfilesonpage < NLINEFILES))
@@ -460,7 +457,7 @@ void loop()
 			String tfilename = filename;
 			tfilename.toLowerCase();
 
-			if (tfilename.lastIndexOf(String(".ch8")) > 0)
+			if (tfilename.lastIndexOf(String(F(".ch8"))) > 0)
 			{
 				if (filename.indexOf(".") < 17)
 					filename = filename.substring(1, filename.indexOf("."));
