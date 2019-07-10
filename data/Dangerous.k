@@ -1,13 +1,12 @@
-4 2 7 6 5 5 4 6
-15
+4 2 8 6 0 5 4 6
+11
 0
-2
-80
+1
+192
 30
 60
 200
-Breakout (Brix hack), by: David Winter. This game is an "arkanoid" precursor. You have 5 lives, and your goal is the destruction of all the brixs. The game ends when all the brixs are destroyed. This game is the same than BRIX, but has graphics looking like the game on the Atari 2600 console.
-
+Most Dangerous Game by Peter Maruhnic. Pits a hunter against a hunted in a maze.  The hunter must shoot the hunted before either time runs out or the hunted escapes the maze. However, neither the hunted nor the hunter can see a wall in the maze until he runs into it.
 
 
 //INSTRUCTIONS

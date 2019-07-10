@@ -6,8 +6,7 @@
 30
 60
 200
-Breakout (Brix hack), by: David Winter. This game is an "arkanoid" precursor. You have 5 lives, and your goal is the destruction of all the brixs. The game ends when all the brixs are destroyed. This game is the same than BRIX, but has graphics looking like the game on the Atari 2600 console.
-
+Knock out the bricks by Andreas Gustafsson <gson@niksula.hut.fi> (C) 1990. This is a version of the classic game of knock out the bricks. Not particularly exciting, but I had to include something to show how the interpreter is used. The game ends when all the brixs are destroyed.
 
 
 //INSTRUCTIONS

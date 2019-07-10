@@ -1,13 +1,12 @@
-4 2 7 6 5 5 4 6
-15
+4 8 2 6 5 11 4 6
+14
 0
-2
-80
+1
+203
 30
 60
 200
-Breakout (Brix hack), by: David Winter. This game is an "arkanoid" precursor. You have 5 lives, and your goal is the destruction of all the brixs. The game ends when all the brixs are destroyed. This game is the same than BRIX, but has graphics looking like the game on the Atari 2600 console.
-
+Airplane game
 
 
 //INSTRUCTIONS

@@ -1,13 +1,12 @@
-4 2 7 6 5 5 4 6
-15
+4 2 8 6 5 5 4 6
+14
 0
-2
-80
+7
+203
 30
 60
 200
-Breakout (Brix hack), by: David Winter. This game is an "arkanoid" precursor. You have 5 lives, and your goal is the destruction of all the brixs. The game ends when all the brixs are destroyed. This game is the same than BRIX, but has graphics looking like the game on the Atari 2600 console.
-
+Hidden − find pairs of cards by David Winter, 1991. It's a "memory" game. It is very simple to play. You are playing in a 4*4 card grid. You can see only two cards at the same time. Once this time passed, these two cards will remain shown if they are identical, otherwise they will be hidden again.
 
 
 //INSTRUCTIONS
