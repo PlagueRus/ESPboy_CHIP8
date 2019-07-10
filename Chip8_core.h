@@ -12,8 +12,10 @@
 #endif
 
 #define BIT_RENDERER
+//#define SIMPLE_RENDERER /* broken now */
 
-#define fontchip_OFFSET       0x38
+#define fontchip16x5_OFFSET		(0x38)
+#define fontchip16x10_OFFSET	(0x88)
 
 /*compatibility_emu var
 8XY6/8XYE opcode
@@ -70,12 +72,13 @@ bit8 = 0    drawsprite add "number of out of the screen lines of the sprite" in 
 #define LORESDISPLAY            0
 #define HIRESDISPLAY            1
 
-typedef uint_fast8_t displaybase_t;
+typedef uint_fast32_t displaybase_t;
 
 constexpr auto VF = 0xF;
-constexpr uint_fast8_t BITS_PER_BLOCK = sizeof(displaybase_t) * 8;
+constexpr uint_fast32_t BITS_PER_BLOCK = sizeof(displaybase_t) * 8;
 
-extern const uint8_t PROGMEM fontchip[16 * 5]; // 16 symbols * 5 lines
+extern const uint8_t PROGMEM fontchip16x5[16 * 5]; // 16 symbols * 5 lines
+extern const uint8_t PROGMEM fontchip16x10[16 * 10]; // 16 symbols * 10 lines
 
 class Chip8
 {
@@ -83,16 +86,19 @@ protected:
 
 	uint8_t   mem[0x1000];
 	uint8_t   reg[0x10];    // ram 0x0 - 0xF
-	int16_t   stack[0x10];  // ram 0x16 - 0x36???  EA0h-EFFh
+	int16_t   stack[0x20];  // ram 0x16 - 0x36???  EA0h-EFFh
+	uint8_t   rplflags[8];
+
 	uint8_t   sp;
 	volatile uint8_t stimer, dtimer;
 	uint16_t  pc, I;
 
 	unsigned long m_time;
 	uint8_t flagbuzz;
+	bool	hires;
+	bool	vwrap;
+	bool	hwrap;
 
-	uint8_t		foreground_emu;
-	uint8_t		background_emu;
 	uint8_t		compatibility_emu;   // look above
 	uint8_t		delay_emu;           // delay in microseconds before next opcode done
 	uint8_t		opcodesperframe_emu; // how many opcodes should be done before screen updates
@@ -100,7 +106,7 @@ protected:
 	uint16_t	soundtone_emu;
 
 public:
-	Chip8() :m_time(0), flagbuzz(0)
+	Chip8() :m_time(0), flagbuzz(0), hires(false), vwrap(false), hwrap(true)
 	{
 #ifdef  BIT_RENDERER
 		display = NULL;
@@ -111,12 +117,18 @@ public:
 	virtual ~Chip8() {}
 	virtual void clear_screen() = 0;
 	virtual void draw_pixel(uint_fast16_t x, uint_fast16_t y, uint_least32_t color) = 0;
-	virtual void draw_hline(int x, int y, int w, int color) { for (int i = 0; i < w; i++) draw_pixel(x + i, y, color); }
-	virtual void draw_vline(int x, int y, int h, int color) { for (int i = 0; i < h; i++) draw_pixel(x, y + i, color); }
+	virtual void draw_hline(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_least32_t color) { for (uint_fast16_t i = 0; i < w; i++) draw_pixel(x + i, y, color); }
+
+	virtual void show_errmessage(int msg) {}
+	bool is_hires() const { return hires; }
 
 	virtual void reset()
 	{
+		set_resolution(64, 32);
 		base_clear_screen();
+
+		memcpy_P(&mem[fontchip16x5_OFFSET], fontchip16x5, sizeof(fontchip16x5));
+		memcpy_P(&mem[fontchip16x10_OFFSET], fontchip16x10, sizeof(fontchip16x10));
 
 		stimer = 0;
 		dtimer = 0;
@@ -124,20 +136,27 @@ public:
 
 		pc = 0x200;
 		sp = 0;
+		memset(reg, 0, sizeof(reg));
+		memset(stack, 0, sizeof(stack));
+		memset(rplflags, 0, sizeof(rplflags));
 	}
 
 	virtual void set_resolution(uint_fast16_t w, uint_fast16_t h)
 	{
+		hires = (w == 128);
+
+#ifdef  BIT_RENDERER
 		SCREEN_WIDTH = w;
 		SCREEN_HEIGHT = h;
 		LINE_SIZE = (SCREEN_WIDTH / 8 / sizeof(displaybase_t));
-//		BITS_PER_BLOCK = 8 * sizeof(displaybase_t);
 
 		delete[] display; display = NULL;
 		delete[] dbuffer; dbuffer = NULL;
 
 		display = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 		dbuffer = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
+#endif //  BIT_RENDERER
+
 	}
 
 	virtual bool check_buttons()
@@ -148,12 +167,20 @@ public:
 	virtual void run()
 	{
 		uint16_t c = 0;
-		memcpy_P(&mem[fontchip_OFFSET], fontchip, 16 * 5);
 		while (true)
 		{
 			if (c < opcodesperframe_emu)
 			{
-				do_cpu();
+				auto retcode = do_cpu();
+				if (retcode)
+				{
+					if (retcode < 0)
+					{
+						show_errmessage(retcode);
+						waitanykey();
+					}
+					break;
+				}
 				buzz();
 				delay(delay_emu);
 				c++;
@@ -188,6 +215,10 @@ private:
 	void base_clear_screen()
 	{
 		clear_screen();
+#ifdef BIT_RENDERER
+
+#endif // BIT_RENDERER
+
 		memset(display, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
 		memset(dbuffer, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
 	}
@@ -215,15 +246,12 @@ private:
 		}
 	}
 
-
-#ifdef BIT_RENDERER
-
-	protected:
+protected:
+#ifdef BIT_RENDERER // fast version
 
 	uint_fast16_t SCREEN_WIDTH;
 	uint_fast16_t SCREEN_HEIGHT;
 	uint_fast16_t LINE_SIZE;
-	//uint_fast8_t BITS_PER_BLOCK;
 
 	displaybase_t *display; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 	displaybase_t *dbuffer; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
@@ -297,15 +325,21 @@ private:
 		uint_fast16_t vline, xline;
 		displaybase_t data, datal, datah;
 		uint_fast8_t shift = (x % BITS_PER_BLOCK);
-		uint_fast8_t freebits = (BITS_PER_BLOCK - 8);
-		if (!size) size = 16;
+		if (hires && size == 0) size = 16;
+		uint_fast8_t freebits = (BITS_PER_BLOCK - (hires && size == 16 ? 16 : 8));
 
 		x = x % SCREEN_WIDTH;
 		y = y % SCREEN_HEIGHT;
 
 		for (auto line = 0u; line < size; line++)
 		{
-			data = mem[I + line];
+			if (!vwrap && y + line >= SCREEN_HEIGHT) break;
+
+			if(hires && size == 16)
+				data = mem[I + line*2] * 256 + mem[I + line*2 + 1];
+			else
+				data = mem[I + line];
+
 			data <<= freebits;
 
 			vline = ((y + line) % SCREEN_HEIGHT) * LINE_SIZE;
@@ -314,13 +348,14 @@ private:
 			if (datal)
 			{
 				xline = (x / BITS_PER_BLOCK) % LINE_SIZE;
-				displaybase_t* scr1 = &dbuffer[vline + xline];
+				displaybase_t *scr1 = &dbuffer[vline + xline];
 				if (*scr1 & datal) ret++;
 				if (isOnlyClear && (*scr1 & datal) != datal) isOnlyClear = false;
 				*scr1 ^= datal;
 			}
 
-			// In normal situations condition is not necessary. But there is a bug, when the shift is more than 
+			if (!hwrap && (x / BITS_PER_BLOCK + 1) >= LINE_SIZE) continue;
+			// In normal situations condition is not necessary. But there is a compiler bug, when the shift is more than 
 			// the width of the variable then the variable does not change, appear only with the type uint32_t
 			if (shift > freebits)
 			{
@@ -342,6 +377,7 @@ private:
 		if (BIT6CTL) return ret;
 		return !!ret;
 	}
+
 #endif
 
 #ifdef SIMPLE_RENDERER // old version
@@ -364,7 +400,7 @@ private:
 		sp = 0;
 	}
 
-	void updatedisplay()
+	void update_display()
 	{
 		static uint8_t drawcolor;
 		static uint16_t i, j;
@@ -372,11 +408,7 @@ private:
 		//  tme=millis();
 		for (i = 0; i < 32; i++)
 			for (j = 0; j < 64; j++) {
-				if (display[(i << 6) + j])
-					drawcolor = foreground_emu;
-				else
-					drawcolor = background_emu;
-				tft.fillRect(j << 1, (i << 1) + 16, 2, 2, colors[drawcolor]);
+				draw_pixel(j << 1, (i << 1) + 16, display[(i << 6) + j]);
 			}
 		//   Serial.println(millis()-tme);
 	}
@@ -411,7 +443,6 @@ private:
 	}
 
 #endif
-
 	enum
 	{
 		CHIP8_JMP = 0x1,
@@ -429,8 +460,19 @@ private:
 		CHIP8_DRYS = 0xd,
 
 		CHIP8_EXT0 = 0x0,
-		CHIP8_EXT0_CLS = 0xE0,
-		CHIP8_EXT0_RTS = 0xEE,
+		SCHIP8_EXT0_SCU = 0xD,
+		SCHIP8_EXT0_SCD = 0xC,
+
+		CHIP8_EXT0_E = 0xE,
+		CHIP8_EXT0_E_CLS = 0xE0,
+		CHIP8_EXT0_E_RTS = 0xEE,
+
+		CHIP8_EXT0_F = 0xF,
+		SCHIP8_EXT0_F_SCR = 0xFB,
+		SCHIP8_EXT0_F_SCL = 0xFC,
+		SCHIP8_EXT0_F_EXIT = 0xFD,
+		SCHIP8_EXT0_F_LRES = 0xFE,
+		SCHIP8_EXT0_F_HRES = 0xFF,
 
 		CHIP8_EXTF = 0xF,
 		CHIP8_EXTF_GDELAY = 0x07,
@@ -443,6 +485,8 @@ private:
 		CHIP8_EXTF_BCD = 0x33,
 		CHIP8_EXTF_STR = 0x55,
 		CHIP8_EXTF_LDR = 0x65,
+		CHIP8_EXTF_STRRPL = 0x75,
+		CHIP8_EXTF_LDRRPL = 0x85,
 
 		CHIP8_MATH = 0x8,
 		CHIP8_MATH_MOV = 0x0,
@@ -460,17 +504,31 @@ private:
 		CHIP8_SK_UP = 0xa1,
 	};
 
-	uint8_t do_cpu()
+	enum DOCPU_RET_CODES: int_fast8_t
+	{
+		DOCPU_NOTHING = 0,
+		DOCPU_HALT = 1,
+		DOCPU_UNKNOWN_OPCODE = -1,
+		DOCPU_UNKNOWN_OPCODE_0 = -2,
+		DOCPU_UNKNOWN_OPCODE_00E = -3,
+		DOCPU_UNKNOWN_OPCODE_00F = -4,
+		DOCPU_UNKNOWN_OPCODE_8 = -5,
+		DOCPU_UNKNOWN_OPCODE_E = -6,
+		DOCPU_UNKNOWN_OPCODE_F = -7,
+	};
+
+	int_fast8_t do_cpu()
 	{
 		uint16_t inst, op2, wr, xxx;
 		uint8_t cr;
-		uint8_t op, x, y, zz;
+		uint8_t op, x, y, z, zz;
 
 		inst = (mem[pc] << 8) + mem[pc + 1];
 		pc += 2;
 		op = (inst >> 12) & 0xF;
 		x = (inst >> 8) & 0xF;
 		y = (inst >> 4) & 0xF;
+		z = inst & 0xF;
 		zz = inst & 0x00FF;
 		xxx = inst & 0x0FFF;
 
@@ -522,28 +580,86 @@ private:
 			if (BIT5CTL)
 				pc = xxx + reg[x];
 			else
-				pc = xxx + reg[0];
+				pc = (xxx + reg[0]) & 0xFFF;
+
 			break;
 		case CHIP8_RAND: //rand xxx
 			reg[x] = (rand() % 256) & zz;
 			break;
 
 		case CHIP8_DRYS: //draw sprite
-			reg[VF] = draw_sprite(reg[x], reg[y], inst & 0xF);
+			reg[VF] = draw_sprite(reg[x], reg[y], z);
 			break;
 
 		case CHIP8_EXT0: //extended instruction
-			switch (zz)
+
+			if (y == SCHIP8_EXT0_SCU)
 			{
-			case CHIP8_EXT0_CLS:
-				base_clear_screen();
-				//if (BIT7CTL)
-				//	tft.fillRect(0, 16, 128, 64, colors[background_emu]);
-				break;
-			case CHIP8_EXT0_RTS: // ret
-				sp = (sp - 1) & 0xF;
-				pc = stack[sp] & 0xFFF;
-				break;
+				if (z)
+				{
+					memmove(dbuffer, dbuffer + z * LINE_SIZE, (LINE_SIZE * sizeof(displaybase_t)) * (SCREEN_HEIGHT - z));
+					memset(dbuffer + LINE_SIZE * (SCREEN_HEIGHT - z), 0, z * LINE_SIZE * sizeof(displaybase_t));
+				}
+			}
+			else if (y == SCHIP8_EXT0_SCD)
+			{
+				if (z)
+				{
+					memmove(dbuffer + z * LINE_SIZE, dbuffer, (LINE_SIZE * sizeof(displaybase_t)) * (SCREEN_HEIGHT - z));
+					memset(dbuffer, 0, z * LINE_SIZE * sizeof(displaybase_t));
+				}
+			}
+			else
+			{
+				switch (zz)
+				{
+				case SCHIP8_EXT0_F_SCR:
+					for(uint_fast16_t y = 0; y < SCREEN_HEIGHT; y++)
+						for (int_fast16_t x = LINE_SIZE - 1; x >= 0; x--)
+						{
+							auto t = dbuffer[y * LINE_SIZE + x] >> 4;
+							t |= (x ? dbuffer[y * LINE_SIZE + x - 1] : 0) << (BITS_PER_BLOCK - 4);
+							dbuffer[y * LINE_SIZE + x] = t;
+						}
+					break;
+				case SCHIP8_EXT0_F_SCL:
+					for (uint_fast16_t y = 0; y < SCREEN_HEIGHT; y++)
+						for (uint_fast16_t x = 0; x < LINE_SIZE; x++)
+						{
+							auto t = dbuffer[y * LINE_SIZE + x] << 4;
+							t |= (x < LINE_SIZE - 1 ? dbuffer[y * LINE_SIZE + x + 1] : 0) >> (BITS_PER_BLOCK - 4);
+							dbuffer[y * LINE_SIZE + x] = t;
+						}
+					break;
+					break;
+				case SCHIP8_EXT0_F_EXIT:
+					return DOCPU_HALT;
+				case SCHIP8_EXT0_F_LRES:
+					if (hires)
+					{
+						set_resolution(64, 32);
+						base_clear_screen();
+					}
+					break;
+				case SCHIP8_EXT0_F_HRES:
+					if (!hires)
+					{
+						set_resolution(128, 64);
+						base_clear_screen();
+					}
+					break;
+				case CHIP8_EXT0_E_CLS:
+					base_clear_screen();
+					//if (BIT7CTL)
+					//	tft.fillRect(0, 16, 128, 64, colors[background_emu]);
+					break;
+				case CHIP8_EXT0_E_RTS: // ret
+					sp = (sp - 1) & 0xF;
+					pc = stack[sp] & 0xFFF;
+					break;
+				default:
+					return DOCPU_UNKNOWN_OPCODE_0;
+				}
 			}
 			break;
 
@@ -665,6 +781,8 @@ private:
 					}
 				}
 				break;
+			default:
+				return DOCPU_UNKNOWN_OPCODE_8;
 			}
 			break;
 
@@ -681,6 +799,8 @@ private:
 				if (!iskeypressed(reg[x]))
 					pc += 2;
 				break;
+			default:
+				return DOCPU_UNKNOWN_OPCODE_E;
 			}
 			break;
 
@@ -703,9 +823,16 @@ private:
 				break;
 			case CHIP8_EXTF_ADI: //add i+r(x)
 				I += reg[x];
+				if (I > 0xFFF)
+					reg[VF] = 1, I %= 0xFFF;
+				else 
+					reg[VF] = 0;
 				break;
-			case CHIP8_EXTF_FONT: //fontchip i
-				I = fontchip_OFFSET + (reg[x] * 5);
+			case CHIP8_EXTF_FONT: //fontchip 16*5 i
+				I = fontchip16x5_OFFSET + (reg[x] * 5);
+				break;
+			case CHIP8_EXTF_XFONT: //fontchip 16*10 i
+				I = fontchip16x10_OFFSET + (reg[x] * 10);
 				break;
 			case CHIP8_EXTF_BCD: //bcd
 				mem[I] = reg[x] / 100;
@@ -722,12 +849,21 @@ private:
 				if (!BIT2CTL)
 					I = I + x + 1;
 				break;
+			case CHIP8_EXTF_LDRRPL: //load from RPL
+				memcpy(reg, rplflags, (x&7) + 1 );
+				break;
+			case CHIP8_EXTF_STRRPL: //save to RPL
+				memcpy(rplflags, reg, (x&7) + 1 );
+				break;
+			default:
+				return DOCPU_UNKNOWN_OPCODE_F;
 			}
 			break;
+		default:
+			return DOCPU_UNKNOWN_OPCODE;
 		}
-		return (0);
+		return DOCPU_NOTHING;
 	}
-
 };
 
 #endif//__CHIP8_CORE__

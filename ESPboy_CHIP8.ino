@@ -82,16 +82,25 @@ class TFT_Chip8 : public Chip8
 	uint_fast16_t m_shift = 16; // shift from upper edge of the screen
 
 public:
+	uint16_t		foreground_emu;
+	uint16_t		background_emu;
+
+public:
 	TFT_Chip8(TFT_eSPI *tft): m_tft(tft) {}
 	virtual ~TFT_Chip8() {}
 	virtual void clear_screen() override
 	{
-		if(m_tft)
-			m_tft->fillScreen(TFT_BLACK);
+		m_tft->fillScreen(colors[background_emu]);
 	}
 	virtual void draw_pixel(uint_fast16_t x, uint_fast16_t y, uint_least32_t color) override
 	{
-		m_tft->fillRect(x * 2, y * 2 + m_shift, 2, 2, colors[color ? foreground_emu : background_emu]);
+		auto pxwidth = is_hires() ? 1 : 2;
+		m_tft->fillRect(x * pxwidth, y * pxwidth + m_shift, pxwidth, pxwidth, colors[color ? foreground_emu : background_emu]);
+	}
+	virtual void draw_hline(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_least32_t color) override
+	{
+		auto pxwidth = is_hires() ? 1 : 2;
+		m_tft->fillRect(x * pxwidth, y * pxwidth + m_shift, w * pxwidth, pxwidth, colors[color ? foreground_emu : background_emu]);
 	}
 	virtual bool check_buttons() override
 	{
@@ -215,7 +224,6 @@ public:
 			f.close();
 			if (foreground_emu == 255)
 				foreground_emu = random(17) + 1;
-			//	compatibility_emu = DEFAULTCOMPATIBILITY;
 		}
 		else
 		{
@@ -223,8 +231,7 @@ public:
 				keys[c] = default_buttons[c];
 			foreground_emu = random(10) + 9;
 			background_emu = DEFAULTBACKGROUND;
-			// compatibility_emu = DEFAULTCOMPATIBILITY;
-			compatibility_emu = 30;
+			compatibility_emu = DEFAULTCOMPATIBILITY;
 			delay_emu = DEFAULTDELAY;
 			opcodesperframe_emu = DEFAULTOPCODEPERFRAME;
 			timers_emu = DEFAULTTIMERSFREQ;
@@ -511,7 +518,7 @@ void loop()
 		waitkeyunpressed();
 		break;
 	case APP_EMULATE: //chip8 emulation
-		tft.fillScreen(TFT_CYAN);
+		tft.fillScreen(colors[chip8.background_emu]);
 		chip8.run();
 		emustate = APP_SHOW_DIR;
 		break;
