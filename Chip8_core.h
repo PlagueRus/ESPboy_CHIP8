@@ -11,9 +11,6 @@
 #define memcpy_P memcpy
 #endif
 
-#define BIT_RENDERER
-//#define SIMPLE_RENDERER /* broken now */
-
 #define fontchip16x5_OFFSET		(0x38)
 #define fontchip16x10_OFFSET	(0x88)
 
@@ -96,6 +93,7 @@ protected:
 	unsigned long m_time;
 	uint8_t flagbuzz;
 	bool	hires;
+	bool	schip;
 	bool	vwrap;
 	bool	hwrap;
 
@@ -108,10 +106,8 @@ protected:
 public:
 	Chip8() :m_time(0), flagbuzz(0), hires(false), vwrap(false), hwrap(true)
 	{
-#ifdef  BIT_RENDERER
 		display = NULL;
 		dbuffer = NULL;
-#endif//BIT_RENDERER
 		set_resolution(64, 32);
 	}
 	virtual ~Chip8() {}
@@ -145,7 +141,6 @@ public:
 	{
 		hires = (w == 128);
 
-#ifdef  BIT_RENDERER
 		SCREEN_WIDTH = w;
 		SCREEN_HEIGHT = h;
 		LINE_SIZE = (SCREEN_WIDTH / 8 / sizeof(displaybase_t));
@@ -155,8 +150,6 @@ public:
 
 		display = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 		dbuffer = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
-#endif //  BIT_RENDERER
-
 	}
 
 	virtual bool check_buttons()
@@ -215,9 +208,6 @@ private:
 	void base_clear_screen()
 	{
 		clear_screen();
-#ifdef BIT_RENDERER
-
-#endif // BIT_RENDERER
 
 		memset(display, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
 		memset(dbuffer, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
@@ -247,7 +237,6 @@ private:
 	}
 
 protected:
-#ifdef BIT_RENDERER // fast version
 
 	uint_fast16_t SCREEN_WIDTH;
 	uint_fast16_t SCREEN_HEIGHT;
@@ -325,8 +314,8 @@ protected:
 		uint_fast16_t vline, xline;
 		displaybase_t data, datal, datah;
 		uint_fast8_t shift = (x % BITS_PER_BLOCK);
-		if (hires && size == 0) size = 16;
-		uint_fast8_t freebits = (BITS_PER_BLOCK - (hires && size == 16 ? 16 : 8));
+		if (schip && size == 0) size = 16;
+		uint_fast8_t freebits = (BITS_PER_BLOCK - (schip && size == 16 ? 16 : 8));
 
 		x = x % SCREEN_WIDTH;
 		y = y % SCREEN_HEIGHT;
@@ -335,7 +324,7 @@ protected:
 		{
 			if (!vwrap && y + line >= SCREEN_HEIGHT) break;
 
-			if(hires && size == 16)
+			if(schip && size == 16)
 				data = mem[I + line*2] * 256 + mem[I + line*2 + 1];
 			else
 				data = mem[I + line];
@@ -378,71 +367,6 @@ protected:
 		return !!ret;
 	}
 
-#endif
-
-#ifdef SIMPLE_RENDERER // old version
-
-	uint8_t   display[64 * 32];// ram F00h-FFFh
-
-	void chip8_cls()
-	{
-		tft.fillScreen(TFT_BLACK);
-		memset(display, 0, sizeof(display));
-	}
-
-	void chip8_reset()
-	{
-		chip8_cls();
-		stimer = 0;
-		dtimer = 0;
-		buzz();
-		pc = 0x200;
-		sp = 0;
-	}
-
-	void update_display()
-	{
-		static uint8_t drawcolor;
-		static uint16_t i, j;
-		//static unsigned long tme;
-		//  tme=millis();
-		for (i = 0; i < 32; i++)
-			for (j = 0; j < 64; j++) {
-				draw_pixel(j << 1, (i << 1) + 16, display[(i << 6) + j]);
-			}
-		//   Serial.println(millis()-tme);
-	}
-
-
-	//SIMPLE VERSION without compatibility and realtime drawing
-	uint8_t drawsprite(uint8_t x, uint8_t y, uint8_t size)
-	{
-		uint8_t data, mask, c, d, masked, xdisp, ydisp, ret;
-		uint16_t addrdisplay;
-		ret = 0;
-		for (c = 0; c < size; c++) {
-			data = mem[I + c];
-			mask = 0b10000000;
-			ydisp = y + c;
-			for (d = 0; d < 8; d++) {
-				xdisp = x + d;
-				masked = !!(data & mask);
-				addrdisplay = xdisp + (ydisp << 6);
-				if (xdisp < 64 && ydisp < 32) {
-					if (display[addrdisplay] && masked) ret++;
-
-					display[addrdisplay] ^= masked;
-				}
-				mask >>= 1;
-			}
-		}
-
-		if (BIT7CTL) updatedisplay();
-
-		return (ret ? 1 : 0);
-	}
-
-#endif
 	enum
 	{
 		CHIP8_JMP = 0x1,
@@ -595,6 +519,7 @@ protected:
 
 			if (y == SCHIP8_EXT0_SCU)
 			{
+				schip = true;
 				if (z)
 				{
 					memmove(dbuffer, dbuffer + z * LINE_SIZE, (LINE_SIZE * sizeof(displaybase_t)) * (SCREEN_HEIGHT - z));
@@ -603,6 +528,7 @@ protected:
 			}
 			else if (y == SCHIP8_EXT0_SCD)
 			{
+				schip = true;
 				if (z)
 				{
 					memmove(dbuffer + z * LINE_SIZE, dbuffer, (LINE_SIZE * sizeof(displaybase_t)) * (SCREEN_HEIGHT - z));
@@ -614,6 +540,7 @@ protected:
 				switch (zz)
 				{
 				case SCHIP8_EXT0_F_SCR:
+					schip = true;
 					for(uint_fast16_t y = 0; y < SCREEN_HEIGHT; y++)
 						for (int_fast16_t x = LINE_SIZE - 1; x >= 0; x--)
 						{
@@ -623,6 +550,7 @@ protected:
 						}
 					break;
 				case SCHIP8_EXT0_F_SCL:
+					schip = true;
 					for (uint_fast16_t y = 0; y < SCREEN_HEIGHT; y++)
 						for (uint_fast16_t x = 0; x < LINE_SIZE; x++)
 						{
@@ -631,10 +559,11 @@ protected:
 							dbuffer[y * LINE_SIZE + x] = t;
 						}
 					break;
-					break;
 				case SCHIP8_EXT0_F_EXIT:
+					schip = true;
 					return DOCPU_HALT;
 				case SCHIP8_EXT0_F_LRES:
+					schip = true;
 					if (hires)
 					{
 						set_resolution(64, 32);
@@ -642,6 +571,7 @@ protected:
 					}
 					break;
 				case SCHIP8_EXT0_F_HRES:
+					schip = true;
 					if (!hires)
 					{
 						set_resolution(128, 64);
