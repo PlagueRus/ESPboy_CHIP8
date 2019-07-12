@@ -384,7 +384,8 @@ protected:
 		CHIP8_DRYS = 0xd,
 
 		CHIP8_EXT0 = 0x0,
-		SCHIP8_EXT0_SCU = 0xD,
+		SCHIP8_EXT0_SCUd = 0xD,
+		SCHIP8_EXT0_SCUb = 0xB,
 		SCHIP8_EXT0_SCD = 0xC,
 
 		CHIP8_EXT0_E = 0xE,
@@ -460,7 +461,7 @@ protected:
 		{
 		case CHIP8_JSR: // jsr xyz
 			stack[sp] = pc;
-			sp = (sp + 1) & 0x0F;
+			sp = (sp + 1) & 0x1F;
 			pc = inst & 0xFFF;
 			break;
 
@@ -517,7 +518,7 @@ protected:
 
 		case CHIP8_EXT0: //extended instruction
 
-			if (y == SCHIP8_EXT0_SCU)
+			if (y == SCHIP8_EXT0_SCUd || y == SCHIP8_EXT0_SCUb)
 			{
 				schip = true;
 				if (z)

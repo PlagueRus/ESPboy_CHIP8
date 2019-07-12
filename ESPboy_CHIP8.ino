@@ -3,7 +3,7 @@ ESPboy chip8/schip emulator by RomanS
 Special thanks to Alvaro Alea Fernandez for his Chip-8 emulator, Igor (corax69), DmitryL (Plague), John Earnest (https://github.com/JohnEarnest/Octo/tree/gh-pages/docs) for help
 
 ESPboy project page:
-https://hackaday.io/project/164830-espboy-beyond-the-games-platform-with-wifihttps://hackaday.io/project/164830-espboy-beyond-the-games-platform-with-wifi
+https://hackaday.io/project/164830-espboy-beyond-the-games-platform-with-wifi
 */
 
 #include <FS.h>
