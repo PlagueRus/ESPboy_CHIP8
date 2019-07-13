@@ -14,13 +14,22 @@ struct str2Int {
 template<typename ___A, ___A T> constexpr ___A force_compile_time() { return T; }
 #define B(___STR) (force_compile_time<int, str2Int(#___STR).bitline()>())
 /////////////////////////////////////////////////////////////////////////////////////////
+// B() MACRO:
+//	space	:	ignored
+//	. (dot)	:	equal 0 
+//	other	:	equal 1
+//
+// EXAMPLE
+//	B( *01 . ) == 14 (i.e. 0b1110)
+/////////////////////////////////////////////////////////////////////////////////////////
+
 
 #define COSMAC_FONT			// low res
 #define HP48_SUPERCHIP_FONT // hi res
 
 #ifdef COSMAC_FONT
 
-const uint8_t PROGMEM fontchip16x5[16 * 5] = {
+const uint8_t PROGMEM fontchip4x5[16 * 5] = {
 	B( 0 0 0 0 . . . . ),
 	B( 0 . . 0 . . . . ),
 	B( 0 . . 0 . . . . ),
@@ -123,7 +132,7 @@ const uint8_t PROGMEM fontchip16x5[16 * 5] = {
 
 #ifdef HP48_SUPERCHIP_FONT
 
-const uint8_t PROGMEM fontchip16x10[16 * 10] = {
+const uint8_t PROGMEM fontchip8x10[16 * 10] = {
 	B( . . 0 0 0 0 . . ),
 	B( . 0 0 0 0 0 0 . ),
 	B( 0 0 . . . . 0 0 ),
@@ -234,7 +243,7 @@ const uint8_t PROGMEM fontchip16x10[16 * 10] = {
 	B( . 0 0 0 0 0 0 . ),
 	B( 0 0 0 0 0 0 . . ),
 
-	// HP48 Supership don't have A-F symbols for hi res, but we need it
+	// HP48 Supership don't have A-F symbols for hi-res, but we need it
 
 	B( . . . 0 0 . . . ),
 	B( . . 0 0 0 0 . . ),
@@ -245,7 +254,7 @@ const uint8_t PROGMEM fontchip16x10[16 * 10] = {
 	B( 0 0 0 0 0 0 0 0 ),
 	B( 0 0 . . . . 0 0 ),
 	B( 0 0 . . . . 0 0 ),
-	B( 0 . . . . . . 0 ),
+	B( 0 0 . . . . 0 0 ),
 
 	B( 0 0 0 0 0 0 . . ),
 	B( . 0 0 0 0 0 0 . ),
@@ -308,7 +317,7 @@ const uint8_t PROGMEM fontchip16x10[16 * 10] = {
 
 #if !defined(COSMAC_FONT)
 
-const uint8_t PROGMEM fontchip16x5[16 * 5] = {
+const uint8_t PROGMEM fontchip4x5[16 * 5] = {
 	B( . H H . . . . . ),
 	B( H . . H . . . . ), 
 	B( H . . H . . . . ), 
@@ -411,7 +420,7 @@ const uint8_t PROGMEM fontchip16x5[16 * 5] = {
 
 #if !defined(HP48_SUPERCHIP_FONT)
 
-const uint8_t PROGMEM fontchip16x10[16 * 10] = {
+const uint8_t PROGMEM fontchip8x10[16 * 10] = {
 	B( . . . . . . . . ),
 	B( . . H H H H . . ),
 	B( . H . . . . H . ),

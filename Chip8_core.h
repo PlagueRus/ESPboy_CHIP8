@@ -11,8 +11,8 @@
 #define memcpy_P memcpy
 #endif
 
-#define fontchip16x5_OFFSET		(0x38)
-#define fontchip16x10_OFFSET	(0x88)
+#define fontchip4x5_OFFSET		(0x38)
+#define fontchip8x10_OFFSET	(0x88)
 
 /*compatibility_emu var
 8XY6/8XYE opcode
@@ -74,8 +74,8 @@ typedef uint_fast32_t displaybase_t;
 constexpr auto VF = 0xF;
 constexpr uint_fast32_t BITS_PER_BLOCK = sizeof(displaybase_t) * 8;
 
-extern const uint8_t PROGMEM fontchip16x5[16 * 5]; // 16 symbols * 5 lines
-extern const uint8_t PROGMEM fontchip16x10[16 * 10]; // 16 symbols * 10 lines
+extern const uint8_t PROGMEM fontchip4x5[16 * 5]; // 16 symbols * 5 lines
+extern const uint8_t PROGMEM fontchip8x10[16 * 10]; // 16 symbols * 10 lines
 
 class Chip8
 {
@@ -124,8 +124,8 @@ public:
 		set_resolution(64, 32);
 		base_clear_screen();
 
-		memcpy_P(&mem[fontchip16x5_OFFSET], fontchip16x5, sizeof(fontchip16x5));
-		memcpy_P(&mem[fontchip16x10_OFFSET], fontchip16x10, sizeof(fontchip16x10));
+		memcpy_P(&mem[fontchip4x5_OFFSET], fontchip4x5, sizeof(fontchip4x5));
+		memcpy_P(&mem[fontchip8x10_OFFSET], fontchip8x10, sizeof(fontchip8x10));
 
 		stimer = 0;
 		dtimer = 0;
@@ -797,10 +797,10 @@ protected:
 					reg[VF] = 0;
 				break;
 			case CHIP8_EXTF_FONT: //fontchip 16*5 i
-				I = fontchip16x5_OFFSET + (reg[x] * 5);
+				I = fontchip4x5_OFFSET + (reg[x] * 5);
 				break;
 			case CHIP8_EXTF_XFONT: //fontchip 16*10 i
-				I = fontchip16x10_OFFSET + (reg[x] * 10);
+				I = fontchip8x10_OFFSET + (reg[x] * 10);
 				break;
 			case CHIP8_EXTF_BCD: //bcd
 				mem[I] = reg[x] / 100;
