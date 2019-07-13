@@ -108,6 +108,7 @@ public:
 	{
 		display = NULL;
 		dbuffer = NULL;
+		bg_color = BG_UNDEFINED;
 		set_resolution(64, 32);
 	}
 	virtual ~Chip8() {}
@@ -150,6 +151,9 @@ public:
 
 		display = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 		dbuffer = new displaybase_t[LINE_SIZE * SCREEN_HEIGHT]; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
+
+		memset(display, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
+		memset(dbuffer, 0, LINE_SIZE * SCREEN_HEIGHT * sizeof(displaybase_t));
 	}
 
 	virtual bool check_buttons()
@@ -244,6 +248,15 @@ protected:
 
 	displaybase_t *display; // 64x32 bit == 8*8x32 bit (+2 for memcpy simplification)
 	displaybase_t *dbuffer; // (8 + 2 for edges)*8x32 == 32 rows 10 cols
+
+	enum BGCOLOR
+	{
+		BG_UNDEFINED = -1,
+		BG_BLUE = 0,
+		BG_BLACK,
+		BG_GREEN,
+		BG_RED,
+	}bg_color;
 
 	// function declaration before definition to avoid compiler bug
 	//void drawblock(int x, int y, displaybase_t block, displaybase_t diff);
@@ -365,6 +378,12 @@ protected:
 
 		if (BIT6CTL) return ret;
 		return !!ret;
+	}
+
+	virtual bool shift_background_color()
+	{
+		bg_color = static_cast<BGCOLOR>((bg_color + 1) & 3);
+		return true;
 	}
 
 	enum
@@ -518,7 +537,25 @@ protected:
 
 		case CHIP8_EXT0: //extended instruction
 
-			if (y == SCHIP8_EXT0_SCUd || y == SCHIP8_EXT0_SCUb)
+			if (xxx == 0x2AC) // HI-res template
+			{
+				reset();
+				set_resolution(64, 64);
+				pc = 0x2C0;
+			}
+			else if (xxx == 0x230) // background color-shift
+			{	
+				base_clear_screen();
+				if( shift_background_color() )
+				{
+					for (auto i = 0u; i < LINE_SIZE * SCREEN_HEIGHT; i++)
+					{
+						display[i] = ~dbuffer[i];
+					}
+					update_display();
+				}
+			}
+			else if (x == 0 && (y == SCHIP8_EXT0_SCUd || y == SCHIP8_EXT0_SCUb))
 			{
 				schip = true;
 				if (z)
@@ -527,7 +564,7 @@ protected:
 					memset(dbuffer + LINE_SIZE * (SCREEN_HEIGHT - z), 0, z * LINE_SIZE * sizeof(displaybase_t));
 				}
 			}
-			else if (y == SCHIP8_EXT0_SCD)
+			else if (x == 0 && y == SCHIP8_EXT0_SCD)
 			{
 				schip = true;
 				if (z)
@@ -740,7 +777,7 @@ protected:
 			{
 			case CHIP8_EXTF_GDELAY: // getdelay
 				reg[x] = dtimer;
-				update_display();
+				//update_display();
 				break;
 			case CHIP8_EXTF_KEY: //waitkey
 				reg[x] = waitanykey();
