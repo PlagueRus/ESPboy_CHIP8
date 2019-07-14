@@ -29,7 +29,7 @@ bit2 = 0    I is set to I + X + 1 after operation
 bit3 = 1    arithmetic results write to vf after status flag
 bit3 = 0    vf write only status flag
 
-DXYN
+DXYN (x - bit 4, y - bit 7)
 bit4 = 1    wrapping sprites
 bit4 = 0    clip sprites at screen edges instead of wrapping
 
@@ -42,7 +42,7 @@ DXYN checkbit8
 bit6 = 1    drawsprite returns number of collised rows of the sprite + rows out of the screen lines of the sprite (check for bit8)
 bit6 = 0    drawsprite returns 1 if collision/s and 0 if no collision/s
 
-EMULATOR TFT DRAW
+EMULATOR TFT DRAW (disabled)
 bit7 = 1    draw to TFT just after changing pixel by drawsprite() not on timer
 bit7 = 0    redraw all TFT from display on timer
 
@@ -51,14 +51,23 @@ bit8 = 1    drawsprite does not add "number of out of the screen lines of the sp
 bit8 = 0    drawsprite add "number of out of the screen lines of the sprite" in returned value
 */
 
-#define BIT1CTL (compatibility_emu & 1)
-#define BIT2CTL (compatibility_emu & 2)
-#define BIT3CTL (compatibility_emu & 4)
-#define BIT4CTL (compatibility_emu & 8)
-#define BIT5CTL (compatibility_emu & 16)
-#define BIT6CTL (compatibility_emu & 32)
-#define BIT7CTL (compatibility_emu & 64)
-#define BIT8CTL (compatibility_emu & 128)
+#define C_VX_instead_VY (compatibility_emu & 1)
+#define C_LD_I_unchanged (compatibility_emu & 2)
+#define C_change_VF_first (compatibility_emu & 4)
+#define C_wrap_sprites_X (compatibility_emu & 8)
+#define C_wrap_sprites_Y (compatibility_emu & 64)
+#define C_HP48_Bxxx_bug (compatibility_emu & 16)
+#define C_draw_returns_lines (compatibility_emu & 32)
+#define C_clip_y_collides (compatibility_emu & 128)
+#define C_clip_x_collides (compatibility_emu & 256)
+#define C_dont_I_change_VF (compatibility_emu & 512)
+
+#define U_on_timer (update_flag & 1)
+#define U_on_each_draw (update_flag & 2)
+#define U_on_bit_set_only (update_flag & 3)
+#define U_on_check_keys (update_flag & 4)
+#define U_on_wait (update_flag & 5)
+#define U_on_sound (update_flag & 6)
 
 #define DEFAULTCOMPATIBILITY    0b01000011 //bit bit8,bit7...bit1;
 #define DEFAULTOPCODEPERFRAME   40
@@ -94,22 +103,24 @@ protected:
 	uint8_t flagbuzz;
 	bool	hires;
 	bool	schip;
-	bool	vwrap;
-	bool	hwrap;
+//	bool	vwrap;
+//	bool	hwrap;
 
 	uint8_t		compatibility_emu;   // look above
+	uint8_t		update_flag;
 	uint8_t		delay_emu;           // delay in microseconds before next opcode done
 	uint8_t		opcodesperframe_emu; // how many opcodes should be done before screen updates
 	uint8_t		timers_emu;          // freq of timers. standart 60hz
 	uint16_t	soundtone_emu;
 
 public:
-	Chip8() :m_time(0), flagbuzz(0), hires(false), vwrap(false), hwrap(true)
+	Chip8() :m_time(0), flagbuzz(0), hires(false) //, vwrap(false), hwrap(true)
 	{
 		display = NULL;
 		dbuffer = NULL;
 		bg_color = BG_UNDEFINED;
 		set_resolution(64, 32);
+		update_flag = 1 + 4;
 	}
 	virtual ~Chip8() {}
 	virtual void clear_screen() = 0;
@@ -179,12 +190,12 @@ public:
 					break;
 				}
 				buzz();
-				delay(delay_emu);
+				//delay(delay_emu);
 				c++;
 			}
 			else
 			{
-				if (!BIT7CTL)
+				if (U_on_timer)
 					update_display();
 				c = 0;
 			}
@@ -335,7 +346,7 @@ protected:
 
 		for (auto line = 0u; line < size; line++)
 		{
-			if (!vwrap && y + line >= SCREEN_HEIGHT) break;
+			if (!C_wrap_sprites_Y && y + line >= SCREEN_HEIGHT) break;
 
 			if(schip && size == 16)
 				data = mem[I + line*2] * 256 + mem[I + line*2 + 1];
@@ -356,7 +367,7 @@ protected:
 				*scr1 ^= datal;
 			}
 
-			if (!hwrap && (x / BITS_PER_BLOCK + 1) >= LINE_SIZE) continue;
+			if (!C_wrap_sprites_X && (x / BITS_PER_BLOCK + 1) >= LINE_SIZE) continue;
 			// In normal situations condition is not necessary. But there is a compiler bug, when the shift is more than 
 			// the width of the variable then the variable does not change, appear only with the type uint32_t
 			if (shift > freebits)
@@ -376,7 +387,7 @@ protected:
 		if (!isOnlyClear)
 			update_display();
 
-		if (BIT6CTL) return ret;
+		if (C_draw_returns_lines) return ret;
 		return !!ret;
 	}
 
@@ -499,8 +510,26 @@ protected:
 			break;
 
 		case CHIP8_SKEQr: //skeq: skip next opcode if r(x)=r(y)
-			if (reg[x] == reg[y])
-				pc += 2;
+			switch (z)
+			{
+			case 1:
+				if (reg[x] > reg[y])
+					pc += 2;
+				break;
+			case 2:
+				if (reg[x] < reg[y])
+					pc += 2;
+				break;
+			case 3:
+				if (reg[x] != reg[y])
+					pc += 2;
+				break;
+			case 0:
+			default:
+				if (reg[x] == reg[y])
+					pc += 2;
+				break;
+			}
 			break;
 
 		case CHIP8_MOVx: // mov xxx
@@ -512,8 +541,40 @@ protected:
 			break;
 
 		case CHIP8_SKNEr: //skne: skip next opcode if r(x)<>r(y)
-			if (reg[x] != reg[y])
-				pc += 2;
+			switch (z)
+			{
+			case 1:
+				wr = reg[x] * reg[y];
+				reg[x] = static_cast<uint8_t>(wr);
+				reg[VF] = wr >> 8;
+				break;
+			case 2:
+				if (reg[y])
+				{
+					cr = reg[x] / reg[y];
+					reg[VF] = reg[x] % reg[y];
+					reg[x] = cr;
+				}
+				else
+				{
+					reg[VF] = 0;
+					reg[x] = 0;
+				}
+				break;
+			case 3:
+				wr = reg[x] * 256 + reg[y];
+				for (auto i = 4; i >= 0; i--)
+				{
+					mem[(I + i) & 0xFFF] = wr % 10;
+					wr /= 10;
+				}
+				break;
+			case 0:
+			default:
+				if (reg[x] != reg[y])
+					pc += 2;
+				break;
+			}
 			break;
 
 		case CHIP8_MVI: // mvi xxx
@@ -521,8 +582,8 @@ protected:
 			break;
 
 		case CHIP8_JMI: // jmi xxx		
-			if (BIT5CTL)
-				pc = xxx + reg[x];
+			if (C_HP48_Bxxx_bug)
+				pc = (xxx + reg[x]) & 0xFFF;
 			else
 				pc = (xxx + reg[0]) & 0xFFF;
 
@@ -541,6 +602,7 @@ protected:
 			{
 				reset();
 				set_resolution(64, 64);
+				hires = true;
 				pc = 0x2C0;
 			}
 			else if (xxx == 0x230) // background color-shift
@@ -648,12 +710,12 @@ protected:
 				reg[x] ^= reg[y];
 				break;
 			case CHIP8_MATH_ADD: //add
-				if (BIT3CTL)
+				if (C_change_VF_first)
 				{   // carry first
 					wr = reg[x];
 					wr += reg[y];
 					reg[VF] = wr > 0xFF;
-					reg[x] = reg[x] + reg[y];
+					reg[x] = static_cast<uint8_t>(wr);
 				}
 				else
 				{
@@ -664,10 +726,11 @@ protected:
 				}
 				break;
 			case CHIP8_MATH_SUB: //sub
-				if (BIT3CTL)
+				if (C_change_VF_first)
 				{   // carry first
+					cr = reg[x] - reg[y];
 					reg[VF] = reg[y] <= reg[x];
-					reg[x] = reg[x] - reg[y];
+					reg[x] = cr;
 				}
 				else
 				{
@@ -677,22 +740,24 @@ protected:
 				}
 				break;
 			case CHIP8_MATH_SHR: //shr
-				if (BIT3CTL)
+				if (C_change_VF_first)
 				{   // carry first
-					if (BIT1CTL)
+					if (C_VX_instead_VY)
 					{
+						cr = reg[x] >> 1;
 						reg[VF] = reg[x] & 0x1;
-						reg[x] >>= 1;
+						reg[x] = cr;
 					}
 					else
 					{
+						cr = reg[y] >> 1;
 						reg[VF] = reg[y] & 0x1;
-						reg[x] = reg[y] >> 1;
+						reg[x] = cr;
 					}
 				}
 				else
 				{
-					if (BIT1CTL)
+					if (C_VX_instead_VY)
 					{
 						cr = reg[x] & 0x1;
 						reg[x] >>= 1;
@@ -707,10 +772,11 @@ protected:
 				}
 				break;
 			case CHIP8_MATH_RSB: //rsb
-				if (BIT3CTL)
+				if (C_change_VF_first)
 				{   // carry first
+					cr = reg[y] - reg[x];
 					reg[VF] = reg[y] >= reg[x];
-					reg[x] = reg[y] - reg[x];
+					reg[x] = cr;
 				}
 				else
 				{
@@ -720,22 +786,24 @@ protected:
 				}
 				break;
 			case CHIP8_MATH_SHL: //shl
-				if (BIT3CTL)
+				if (C_change_VF_first)
 				{   // carry first
-					if (BIT1CTL)
+					if (C_VX_instead_VY)
 					{
+						cr = reg[x] << 1;
 						reg[VF] = reg[x] >> 7;
-						reg[x] <<= 1;
+						reg[x] = cr;
 					}
 					else
 					{
+						cr = reg[y] << 1;
 						reg[VF] = reg[y] >> 7;
-						reg[x] = reg[y] << 1;
+						reg[x] = cr;
 					}
 				}
 				else
 				{
-					if (BIT1CTL)
+					if (C_VX_instead_VY)
 					{
 						cr = reg[x] >> 7;
 						reg[x] <<= 1;
@@ -792,9 +860,9 @@ protected:
 			case CHIP8_EXTF_ADI: //add i+r(x)
 				I += reg[x];
 				if (I > 0xFFF)
-					reg[VF] = 1, I %= 0xFFF;
-				else 
-					reg[VF] = 0;
+					reg[VF] = 1, I &= 0xFFF;
+				//else 
+				//	reg[VF] = 0;
 				break;
 			case CHIP8_EXTF_FONT: //fontchip 16*5 i
 				I = fontchip4x5_OFFSET + (reg[x] * 5);
@@ -809,12 +877,12 @@ protected:
 				break;
 			case CHIP8_EXTF_STR: //save
 				memcpy(&mem[I], reg, x + 1);
-				if (!BIT2CTL)
+				if (!C_LD_I_unchanged)
 					I = I + x + 1;
 				break;
 			case CHIP8_EXTF_LDR: //load
 				memcpy(reg, &mem[I], x + 1);
-				if (!BIT2CTL)
+				if (!C_LD_I_unchanged)
 					I = I + x + 1;
 				break;
 			case CHIP8_EXTF_LDRRPL: //load from RPL
